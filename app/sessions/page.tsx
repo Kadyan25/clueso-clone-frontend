@@ -6,6 +6,9 @@ import {
   listSessions,
   processSession,
   Session,
+  addFeedback,
+  listFeedbacks,
+  Feedback,
 } from '@/lib/api';
 
 export default function SessionsPage() {
@@ -13,6 +16,17 @@ export default function SessionsPage() {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // feedback state
+  const [feedbackInputs, setFeedbackInputs] = useState<Record<number, string>>(
+    {},
+  );
+  const [feedbackLists, setFeedbackLists] = useState<
+    Record<number, Feedback[]>
+  >({});
+  const [submittingFeedbackFor, setSubmittingFeedbackFor] = useState<
+    number | null
+  >(null);
 
   const loadSessions = async () => {
     try {
@@ -58,6 +72,41 @@ export default function SessionsPage() {
       setError('Failed to process session');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // feedback handlers
+  const handleFeedbackInputChange = (sessionId: number, value: string) => {
+    setFeedbackInputs((prev) => ({ ...prev, [sessionId]: value }));
+  };
+
+  const handleLoadFeedbacks = async (sessionId: number) => {
+    try {
+      const feedbacks = await listFeedbacks(sessionId);
+      setFeedbackLists((prev) => ({ ...prev, [sessionId]: feedbacks }));
+    } catch (err) {
+      console.error('Failed to load feedbacks', err);
+    }
+  };
+
+  const handleSubmitFeedback = async (sessionId: number) => {
+    const text = feedbackInputs[sessionId]?.trim();
+    if (!text) return;
+
+    try {
+      setSubmittingFeedbackFor(sessionId);
+      const fb = await addFeedback(sessionId, text);
+
+      setFeedbackLists((prev) => {
+        const existing = prev[sessionId] || [];
+        return { ...prev, [sessionId]: [fb, ...existing] };
+      });
+
+      setFeedbackInputs((prev) => ({ ...prev, [sessionId]: '' }));
+    } catch (err) {
+      console.error('Failed to submit feedback', err);
+    } finally {
+      setSubmittingFeedbackFor(null);
     }
   };
 
@@ -169,6 +218,7 @@ export default function SessionsPage() {
                       </button>
                     </div>
                   </div>
+
                   {s.scriptText && (
                     <div className="mt-1 text-xs text-slate-200">
                       <span className="font-semibold text-slate-400">
@@ -177,6 +227,66 @@ export default function SessionsPage() {
                       {s.scriptText}
                     </div>
                   )}
+
+                  {/* Feedback section */}
+                  <div className="mt-4 border-t border-slate-800 pt-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <h4 className="text-xs font-semibold text-slate-200">
+                        Feedback
+                      </h4>
+                      <button
+                        onClick={() => handleLoadFeedbacks(s.id)}
+                        className="text-[0.7rem] text-slate-400 hover:text-slate-200"
+                      >
+                        Load feedback
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      <textarea
+                        className="w-full rounded-md bg-slate-950/70 border border-slate-800 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        rows={2}
+                        placeholder="Add feedback about this script…"
+                        value={feedbackInputs[s.id] || ''}
+                        onChange={(e) =>
+                          handleFeedbackInputChange(s.id, e.target.value)
+                        }
+                      />
+                      <button
+                        onClick={() => handleSubmitFeedback(s.id)}
+                        disabled={submittingFeedbackFor === s.id}
+                        className={`inline-flex items-center rounded-md px-3 py-1 text-[0.7rem] font-medium
+                          ${
+                            submittingFeedbackFor === s.id
+                              ? 'cursor-not-allowed bg-slate-700 text-slate-300'
+                              : 'bg-slate-800 text-slate-100 hover:bg-slate-700'
+                          }`}
+                      >
+                        {submittingFeedbackFor === s.id
+                          ? 'Saving…'
+                          : 'Save feedback'}
+                      </button>
+                    </div>
+
+                    {feedbackLists[s.id] &&
+                      feedbackLists[s.id].length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          {feedbackLists[s.id].map((fb) => (
+                            <div
+                              key={fb.id}
+                              className="rounded-md bg-slate-950/60 border border-slate-800 px-2 py-1.5"
+                            >
+                              <p className="text-xs text-slate-100">
+                                {fb.text}
+                              </p>
+                              <p className="mt-1 text-[0.6rem] text-slate-500">
+                                {new Date(fb.createdAt).toLocaleString()}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                  </div>
                 </div>
               ))}
             </div>
