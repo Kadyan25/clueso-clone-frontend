@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   createSession,
   listSessions,
@@ -17,7 +18,6 @@ export default function SessionsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // feedback state
   const [feedbackInputs, setFeedbackInputs] = useState<Record<number, string>>(
     {},
   );
@@ -75,7 +75,6 @@ export default function SessionsPage() {
     }
   };
 
-  // feedback handlers
   const handleFeedbackInputChange = (sessionId: number, value: string) => {
     setFeedbackInputs((prev) => ({ ...prev, [sessionId]: value }));
   };
@@ -184,9 +183,12 @@ export default function SessionsPage() {
                 >
                   <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <div className="text-sm font-medium text-slate-100">
-                        {s.name}
-                      </div>
+                      {/* clickable session title → detail page */}
+                      <Link href={`/sessions/${s.id}`}>
+                        <div className="text-sm font-medium text-slate-100 hover:underline cursor-pointer">
+                          {s.name}
+                        </div>
+                      </Link>
                       <div className="mt-0.5 text-xs text-slate-500">
                         Created at {new Date(s.createdAt).toLocaleString()}
                       </div>

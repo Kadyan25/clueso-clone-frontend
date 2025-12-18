@@ -21,6 +21,23 @@ export interface Session {
   feedbacks?: Feedback[]; // optional for convenience
 }
 
+export type ExtensionEvent = {
+  id: number;
+  sessionId: number;
+  url: string;
+  steps: any[];        // or a stricter type later
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function listExtensionEvents(sessionId: number): Promise<ExtensionEvent[]> {
+  const res = await fetch(`${API_BASE_URL}/v1/sessions/${sessionId}/extension-events`);
+  if (!res.ok) {
+    throw new Error('Failed to fetch extension events');
+  }
+  return res.json();
+}
+
 export async function createSession(name: string): Promise<Session> {
   const res = await fetch(`${API_BASE_URL}/v1/sessions`, {
     method: 'POST',
