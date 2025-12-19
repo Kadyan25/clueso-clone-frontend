@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { AppHeader } from '@/components/AppHeader';
+
 import {
   Session,
   Feedback,
@@ -12,10 +14,13 @@ import {
   listExtensionEvents,
   ExtensionEvent,
 } from '@/lib/api';
+import { useAuthStore } from '@/lib/auth-store';
 
 export default function SessionDetailPage() {
   const params = useParams();
+  const token = useAuthStore((s) => s.token);
   const sessionId = Number(params?.id);
+
   const [session, setSession] = useState<Session | null>(null);
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [feedbackInput, setFeedbackInput] = useState('');
@@ -26,14 +31,14 @@ export default function SessionDetailPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const all = await listSessions();
+        const all = await listSessions(token ?? undefined);
         const found = all.find((s) => s.id === sessionId) || null;
         setSession(found || null);
 
         if (found) {
           const [fb, events] = await Promise.all([
-            listFeedbacks(sessionId),
-            listExtensionEvents(sessionId),
+            listFeedbacks(sessionId, token ?? undefined),
+            listExtensionEvents(sessionId, token ?? undefined),
           ]);
           setFeedbacks(fb);
           setExtensionEvents(events);
@@ -42,14 +47,14 @@ export default function SessionDetailPage() {
         setLoading(false);
       }
     };
-    if (!Number.isNaN(sessionId)) {
+    if (!Number.isNaN(sessionId) && token) {
       load();
     }
-  }, [sessionId]);
+  }, [sessionId, token]);
 
   const handleProcess = async () => {
     if (!session) return;
-    const updated = await processSession(session.id);
+    const updated = await processSession(session.id, token ?? undefined);
     setSession((prev) => (prev ? { ...prev, ...updated } : prev));
   };
 
@@ -58,13 +63,23 @@ export default function SessionDetailPage() {
     if (!text || !session) return;
     try {
       setSavingFeedback(true);
-      const fb = await addFeedback(session.id, text);
+      const fb = await addFeedback(session.id, text, token ?? undefined);
       setFeedbacks((prev) => [fb, ...prev]);
       setFeedbackInput('');
     } finally {
       setSavingFeedback(false);
     }
   };
+
+  if (!token) {
+    return (
+      <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
+        <p className="text-sm text-slate-400">
+          You must be logged in to view this session.
+        </p>
+      </main>
+    );
+  }
 
   if (loading) {
     return (
@@ -85,6 +100,7 @@ export default function SessionDetailPage() {
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 py-10 px-4">
       <div className="mx-auto max-w-4xl">
+
         <header className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold tracking-tight">
@@ -129,48 +145,48 @@ export default function SessionDetailPage() {
             </p>
           )}
         </section>
-        
-          {/* Extension events section */}
-  <section className="mb-6 rounded-xl border border-slate-800 bg-slate-900/70 p-5">
-    <h2 className="mb-2 text-sm font-medium text-slate-200">
-      Extension events
-    </h2>
-    <p className="mb-2 text-[0.7rem] text-slate-400">
-      Open this page and click the Clueso Clone Chrome extension icon to send
-      page context into this session (ID {session.id}).
-    </p>
-    {extensionEvents.length === 0 ? (
-      <p className="text-xs text-slate-500">
-        No extension events yet for this session.
-      </p>
-    ) : (
-      <ul className="space-y-2 text-sm">
-        {extensionEvents.map((event) => (
-          <li
-            key={event.id}
-            className="rounded-md bg-slate-950/60 border border-slate-800 px-3 py-2"
-          >
-            <div className="text-xs text-slate-300 break-all">
-              {event.url}
-            </div>
-            <div className="mt-1 text-[0.65rem] text-slate-500">
-              {new Date(event.createdAt).toLocaleString()}
-            </div>
-            {event.steps && event.steps.length > 0 && (
-              <ul className="mt-1 list-disc list-inside text-[0.7rem] text-slate-200">
-                {event.steps.map((step, idx) => (
-                  <li key={idx}>
-                    {step.message ?? JSON.stringify(step)}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </li>
-        ))}
-      </ul>
-    )}
-  </section>
-  
+
+        {/* Extension events section */}
+        <section className="mb-6 rounded-xl border border-slate-800 bg-slate-900/70 p-5">
+          <h2 className="mb-2 text-sm font-medium text-slate-200">
+            Extension events
+          </h2>
+          <p className="mb-2 text-[0.7rem] text-slate-400">
+            Open this page and click the Clueso Clone Chrome extension icon to
+            send page context into this session (ID {session.id}).
+          </p>
+          {extensionEvents.length === 0 ? (
+            <p className="text-xs text-slate-500">
+              No extension events yet for this session.
+            </p>
+          ) : (
+            <ul className="space-y-2 text-sm">
+              {extensionEvents.map((event) => (
+                <li
+                  key={event.id}
+                  className="rounded-md bg-slate-950/60 border border-slate-800 px-3 py-2"
+                >
+                  <div className="text-xs text-slate-300 break-all">
+                    {event.url}
+                  </div>
+                  <div className="mt-1 text-[0.65rem] text-slate-500">
+                    {new Date(event.createdAt).toLocaleString()}
+                  </div>
+                  {event.steps && event.steps.length > 0 && (
+                    <ul className="mt-1 list-disc list-inside text-[0.7rem] text-slate-200">
+                      {event.steps.map((step, idx) => (
+                        <li key={idx}>
+                          {step.message ?? JSON.stringify(step)}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
         {/* Feedback section */}
         <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-5">
           <h2 className="mb-3 text-sm font-medium text-slate-200">Feedback</h2>

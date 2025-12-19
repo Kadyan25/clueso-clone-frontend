@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { AppHeader } from '@/components/AppHeader';
+
 import {
   createSession,
   listSessions,
@@ -11,8 +13,11 @@ import {
   listFeedbacks,
   Feedback,
 } from '@/lib/api';
+import { useAuthStore } from '@/lib/auth-store';
 
 export default function SessionsPage() {
+  const token = useAuthStore((s) => s.token);
+
   const [sessions, setSessions] = useState<Session[]>([]);
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,7 +36,7 @@ export default function SessionsPage() {
   const loadSessions = async () => {
     try {
       setError(null);
-      const data = await listSessions();
+      const data = await listSessions(token ?? undefined);
       setSessions(data);
     } catch (err) {
       console.error(err);
@@ -40,15 +45,16 @@ export default function SessionsPage() {
   };
 
   useEffect(() => {
+    if (!token) return;
     loadSessions();
-  }, []);
+  }, [token]);
 
   const handleCreate = async () => {
     if (!name.trim()) return;
     try {
       setLoading(true);
       setError(null);
-      const created = await createSession(name.trim());
+      const created = await createSession(name.trim(), token ?? undefined);
       setSessions((prev) => [created, ...prev]);
       setName('');
     } catch (err) {
@@ -63,7 +69,7 @@ export default function SessionsPage() {
     try {
       setLoading(true);
       setError(null);
-      const updated = await processSession(id);
+      const updated = await processSession(id, token ?? undefined);
       setSessions((prev) =>
         prev.map((s) => (s.id === id ? { ...s, ...updated } : s)),
       );
@@ -81,7 +87,7 @@ export default function SessionsPage() {
 
   const handleLoadFeedbacks = async (sessionId: number) => {
     try {
-      const feedbacks = await listFeedbacks(sessionId);
+      const feedbacks = await listFeedbacks(sessionId, token ?? undefined);
       setFeedbackLists((prev) => ({ ...prev, [sessionId]: feedbacks }));
     } catch (err) {
       console.error('Failed to load feedbacks', err);
@@ -94,7 +100,7 @@ export default function SessionsPage() {
 
     try {
       setSubmittingFeedbackFor(sessionId);
-      const fb = await addFeedback(sessionId, text);
+      const fb = await addFeedback(sessionId, text, token ?? undefined);
 
       setFeedbackLists((prev) => {
         const existing = prev[sessionId] || [];
@@ -109,11 +115,21 @@ export default function SessionsPage() {
     }
   };
 
+  if (!token) {
+    return (
+      <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
+        <p className="text-sm text-slate-400">
+          You must be logged in to view sessions.
+        </p>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 py-10 px-4">
       <div className="mx-auto max-w-5xl">
         {/* Header */}
-        <header className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        {/* <header className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
               Clueso Clone – Sessions
@@ -122,7 +138,9 @@ export default function SessionsPage() {
               Create walkthrough sessions and generate AI-style scripts.
             </p>
           </div>
-        </header>
+        </header> */}
+        <AppHeader />
+
 
         {/* New session card */}
         <section className="mb-6 rounded-xl border border-slate-800 bg-slate-900/70 p-5 shadow-xl shadow-slate-950/70">
