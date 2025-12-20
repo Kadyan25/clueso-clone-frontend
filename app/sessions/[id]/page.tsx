@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { AppHeader } from '@/components/AppHeader';
+import { AuthExtensionBridge } from '@/components/AuthExtensionBridge';
+
 
 import {
   Session,
@@ -74,6 +75,7 @@ export default function SessionDetailPage() {
   if (!token) {
     return (
       <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
+        <AuthExtensionBridge />
         <p className="text-sm text-slate-400">
           You must be logged in to view this session.
         </p>

@@ -3,6 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AppHeader } from '@/components/AppHeader';
+import { AuthExtensionBridge } from '@/components/AuthExtensionBridge';
+
 
 import {
   createSession,
@@ -127,6 +129,7 @@ export default function SessionsPage() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 py-10 px-4">
+      <AuthExtensionBridge />
       <div className="mx-auto max-w-5xl">
         {/* Header */}
         {/* <header className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
