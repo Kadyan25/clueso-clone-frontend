@@ -9,6 +9,7 @@ export function AppHeader() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
 
+
   const handleLogout = () => {
     logout();
     router.push('/login');
