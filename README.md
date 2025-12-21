@@ -288,7 +288,7 @@ text
 ---
 
 ## Limitations & Future Work
-
 - The UI focuses on the core assignment flows and is not a pixel-perfect copy of Clueso.  
-- No advanced error handling, toasts, or skeleton loaders yet.  
-- AI content is based on the backend’s mock implementation; when a real Python AI service is added, only the backend contract should change.
+- In the original Clueso flow, screen/audio recording and AI processing are tightly coupled: as the user records, the system streams data through Node into a Python AI pipeline and returns processed video + script. In this clone, the Chrome extension is scoped to sending **high‑level steps** for a selected session, and AI‑powered insights are exposed as an explicit **“Process with AI”** action on each session (`/sessions` and `/sessions/[id]`), which currently calls the Node backend’s mock implementation instead of a real Python AI.
+- Error handling and UI polish are intentionally minimal (no toasts, skeleton loaders, or retries) to keep the focus on end‑to‑end architecture rather than production UX.
+- When the Python AI service is ready, the frontend should not need changes: it will still call `POST /api/v1/sessions/:id/process`, but that endpoint will delegate to FastAPI instead of generating the script locally in Node.
