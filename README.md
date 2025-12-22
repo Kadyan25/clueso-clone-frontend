@@ -2,14 +2,15 @@
 
 ## Overview
 
-This repository contains the **frontend** for a partial but coherent clone of [Clueso.io](https://www.clueso.io). It is built with the Next.js **App Router**, TypeScript, Tailwind CSS, and Zustand for auth state. [web:105]
+This repository contains the **frontend** for a partial but coherent clone of [Clueso.io](https://www.clueso.io), focusing on the workflow where a browser extension turns product flows into AI‑powered sessions and documentation.[web:22][web:29]  
+It is built with the Next.js **App Router**, TypeScript, Tailwind CSS, and Zustand for auth state.
 
 The frontend talks only to the Node backend at `http://localhost:4000/api/v1` and provides:
 
 - Auth pages (signup + login) using email/password + JWT
-- A sessions dashboard
+- A sessions dashboard that lists sessions created automatically from the Chrome extension
 - A session detail view with AI script, extension events, and feedback
-- A small bridge component to share the JWT with the Chrome extension
+- A bridge component that shares the JWT with the Chrome extension
 
 ---
 
@@ -30,30 +31,26 @@ The frontend talks only to the Node backend at `http://localhost:4000/api/v1` an
 - User signs up or logs in from the frontend → backend returns `{ user, token }`.
 - JWT is stored in a persisted Zustand store.
 - All API calls use `Authorization: Bearer <token>` headers.
-- `/sessions` and `/sessions/[id]` pages call the backend to manage sessions, feedback, and extension events.
-- A client-only bridge component posts the JWT to `window` so the Chrome extension content script can copy it into `chrome.storage.local`.
+- `/sessions` shows a list of sessions that are **created by the Chrome extension**, not by a manual form.
+- `/sessions/[id]` shows details for a single session, including AI script, feedback, and extension events.
+- A client-only `AuthExtensionBridge` component posts the JWT to `window`, and the content script copies it into `chrome.storage.local` so the extension can call backend APIs.
 
 ### Folder structure (simplified)
 
 app/
 layout.tsx # Root layout
-page.tsx # Landing or redirect page
-login/
-page.tsx # Login form
-signup/
-page.tsx # Signup form
-sessions/
-page.tsx # Sessions dashboard
-[id]/
-page.tsx # Session detail view
+page.tsx # Landing / redirect page
+login/page.tsx # Login form
+signup/page.tsx # Signup form
+sessions/page.tsx # Sessions dashboard (list)
+sessions/[id]/page.tsx # Session detail view
 
 components/
 AppHeader.tsx # Top header with title + user + logout
-SessionCard.tsx # Card used on /sessions (optional)
 AuthExtensionBridge.tsx # Sends JWT to window for the extension
 
 lib/
-api.ts # All API helpers (auth, sessions, feedback, extension events)
+api.ts # API helpers (auth, sessions, feedback)
 auth-store.ts # Zustand store for user + token
 
 styles/
@@ -71,7 +68,7 @@ text
 
 The frontend uses a single API helper module that talks to the backend.
 
-const API_BASE_URL =
+export const API_BASE_URL =
 process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000/api';
 
 function authHeaders(token?: string) {
@@ -85,10 +82,10 @@ text
 - `Session`:
   - `id`, `name`, `status`, `scriptText`, `audioFileName`
   - `createdAt`, `updatedAt`
-  - optional `userId`, `feedbacks`
+  - optional `userId`
 - `Feedback`:
   - `id`, `sessionId`, `text`, `createdAt`, `updatedAt`
-- `ExtensionEvent`:
+- `ExtensionEvent` (used mainly in the backend and detail page):
   - `id`, `sessionId`, `url`, `steps`, `createdAt`, `updatedAt`
 
 ### Auth helpers
@@ -98,18 +95,17 @@ text
 
 ### Session helpers (pass `token`)
 
-- `createSession(name, token?)` → `POST /v1/sessions`
 - `listSessions(token?)` → `GET /v1/sessions`
-- `processSession(id, token?)` → `POST /v1/sessions/:id/process` (returns updated `session`)
+- `processSession(id, token?)` → `POST /v1/sessions/:id/process`  
+  Returns an updated `session` object after AI processing.
+
+> Note: there is **no** `createSession` call from the frontend anymore.  
+> Sessions are created by the Chrome extension via `POST /api/v1/sessions/from-extension` on the backend.
 
 ### Feedback helpers
 
 - `addFeedback(sessionId, text, token?)` → `POST /v1/sessions/:id/feedback`
 - `listFeedbacks(sessionId, token?)` → `GET /v1/sessions/:id/feedback`
-
-### Extension event helpers
-
-- `listExtensionEvents(sessionId, token?)` → `GET /v1/sessions/:id/extension-events`
 
 ---
 
@@ -128,7 +124,7 @@ logout: () => void;
 
 text
 
-- Stored in localStorage so refresh persists login.
+- Stored in `localStorage` so refresh persists login.
 - Used by pages/components to:
   - Redirect to `/login` if there is no `token`.
   - Pass `token` into API helpers.
@@ -153,46 +149,39 @@ text
   - Calls `signup(email, password)`.
   - Either directly sets auth and redirects to `/sessions`, or redirects to `/login` depending on the chosen flow.
 
-### `/sessions`
-
-Sessions dashboard page:
+### `/sessions` (Sessions dashboard)
 
 - Reads `token` from the auth store.
 - On mount:
-  - Calls `listSessions(token)` and stores them in local state.
+  - Calls `listSessions(token)` and stores the array in local state.
 - UI:
-  - **New session card**:
-    - Input for session name.
-    - Button to call `createSession(name, token)` and refresh list.
+  - **Info card** explaining that sessions are created automatically by the Chrome extension while the user is logged in.
   - **Sessions list**:
     - For each session:
-      - Name (links to `/sessions/[id]`)
-      - Created date
-      - Status pill (PENDING / PROCESSING / READY / FAILED)
-      - “Process with AI” button → calls `processSession(id, token)` and updates the card.
+      - Name (links to `/sessions/[id]`).
+      - Created date.
+      - Status pill (`PENDING` / `PROCESSING` / `READY` / `FAILED`).
+      - “Process with AI” button → calls `processSession(id, token)` and updates only that card’s state.
       - Optional inline snippet of `scriptText`.
-  - **Feedback section per session** (optional):
-    - Button to load feedback.
+  - **Feedback section per session**:
+    - Button to load feedback via `listFeedbacks`.
     - Textarea + Save button to call `addFeedback`.
 
-### `/sessions/[id]`
+There is **no manual “Create session” form**.  
+Sessions appear when the user uses the Chrome extension’s **Start Recording** button on any page while logged in.
 
-Session detail page:
+### `/sessions/[id]` (Session detail)
 
 - Reads `token` from auth store.
-- Loads:
-  - All sessions via `listSessions(token)` and finds the current one by `id`.
-  - Feedback via `listFeedbacks(id, token)`.
-  - Extension events via `listExtensionEvents(id, token)`.
+- Loads the specific session via `GET /v1/sessions/:id` from the backend (which already includes AI fields and related data).
 - UI sections:
   - **Header**:
     - Session name, created date, status pill.
-    - “Process with AI” button.
+    - “Process with AI” button for that session.
   - **AI Script**:
-    - Shows `scriptText` if available, or a placeholder when status is not READY.
+    - Shows `scriptText` if available, or a placeholder when status is not `READY`.
   - **Extension events**:
-    - Instructions: open this page and click the Chrome extension to send events.
-    - List of events with URL, timestamp, and steps array.
+    - Shows events stored by the backend for this session (URL + steps).
   - **Feedback**:
     - Textarea + Save button to call `addFeedback`.
     - List of existing feedback entries.
@@ -201,10 +190,10 @@ Session detail page:
 
 ## Extension Bridge
 
-A small client-only component (e.g. `AuthExtensionBridge`) runs on every authenticated page:
+A small client-only component `AuthExtensionBridge` runs on authenticated pages (e.g. `/sessions` and `/sessions/[id]`):
 
 - Reads `token` from the auth store.
-- In `useEffect`, calls a helper like `sendJwtToExtension(token)` that does:
+- In `useEffect`, posts the JWT to the window:
 
 window.postMessage({ jwt: token }, window.location.origin);
 
@@ -212,18 +201,18 @@ text
 
 - The Chrome extension **content script** listens for this message and writes the JWT into `chrome.storage.local`.
 
-This is how the extension later calls backend APIs with `Authorization: Bearer <token>`.
+This allows the extension to call backend APIs with `Authorization: Bearer <token>` using the same JWT as the web app.
 
 ---
 
 ## Styling & Layout
 
-- Tailwind CSS is configured via `tailwind.config.*` and `postcss.config.*`. [web:123]
+- Tailwind CSS is configured via `tailwind.config.*` and `postcss.config.*`.[web:23]
 - `app/layout.tsx` sets up the root HTML structure and imports `globals.css`.
 - The sessions pages use a dark SaaS-style layout inspired by Clueso:
-  - Left-aligned column of session cards
-  - Clear status pills and buttons
-  - Sections labeled “AI Script”, “Extension Events”, and “Feedback”
+  - Left-aligned column of session cards.
+  - Clear status pills and call‑to‑action buttons.
+  - Sections labeled “AI Script”, “Extension Events”, and “Feedback”.
 
 ---
 
@@ -235,13 +224,8 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:4000/api
 
 text
 
-Create a `.env.local` file in the frontend repo with:
-
-NEXT_PUBLIC_API_BASE_URL=http://localhost:4000/api
-
-text
-
-When deployed (e.g. to Vercel), this can be updated to point to the hosted backend URL. [web:104]
+Create a `.env.local` file in the frontend repo with that line.  
+When deployed (e.g. to Vercel), update it to point to the hosted backend URL.
 
 ---
 
@@ -272,23 +256,32 @@ npm run dev
 
 text
 
-The app will be available at:
+The app will be available at `http://localhost:3000`.
 
-http://localhost:3000
+---
 
-text
+## End‑to‑End Flow with Extension
 
-5. **Typical flow**
-
-- Ensure the backend is running on `http://localhost:4000`.  
-- Visit `http://localhost:3000/signup` to create a user.  
-- Log in at `/login`, then go to `/sessions` to create and process sessions.  
-- Open a session detail page (e.g. `/sessions/1`), then click the Chrome extension icon to send extension events into that session.
+1. Start the **backend** on `http://localhost:4000`.
+2. Load the **Chrome extension** (from the extension repo) in Developer Mode.
+3. Visit `http://localhost:3000/signup` to create a user and then `http://localhost:3000/login` to log in.
+4. Navigate to `/sessions`. The `AuthExtensionBridge` will send your JWT to the extension.
+5. Open any page you want to “record” (can be any URL).
+6. Click the extension icon → popup → **Start Recording**.
+7. The extension calls `POST /api/v1/sessions/from-extension` on the backend, which:
+   - Creates a new `Session` for the current user.
+   - Creates the first `ExtensionEvent` with `{ url, steps }`.
+   - Opens `/sessions/<id>` in a new tab.
+8. On the session detail page, click **Process with AI** to trigger `POST /api/v1/sessions/:id/process`, which currently uses the Node mock AI and can later be wired to the Python FastAPI service.
 
 ---
 
 ## Limitations & Future Work
-- The UI focuses on the core assignment flows and is not a pixel-perfect copy of Clueso.  
-- In the original Clueso flow, screen/audio recording and AI processing are tightly coupled: as the user records, the system streams data through Node into a Python AI pipeline and returns processed video + script. In this clone, the Chrome extension is scoped to sending **high‑level steps** for a selected session, and AI‑powered insights are exposed as an explicit **“Process with AI”** action on each session (`/sessions` and `/sessions/[id]`), which currently calls the Node backend’s mock implementation instead of a real Python AI.
-- Error handling and UI polish are intentionally minimal (no toasts, skeleton loaders, or retries) to keep the focus on end‑to‑end architecture rather than production UX.
-- When the Python AI service is ready, the frontend should not need changes: it will still call `POST /api/v1/sessions/:id/process`, but that endpoint will delegate to FastAPI instead of generating the script locally in Node.
+
+- The UI focuses on the core assignment flows and is not a pixel-perfect clone of Clueso’s marketing site or studio editor.[web:23]
+- In real Clueso, recording and AI processing are tightly coupled: as the user records, Clueso streams data through a pipeline that turns raw captures into polished videos, scripts, and articles.[web:22][web:31]
+- In this clone:
+  - The Chrome extension creates **sessions + initial events** from the active tab when the user clicks **Start Recording**.
+  - The user explicitly clicks **Process with AI** to run AI processing for a given session.
+  - The AI layer is currently a mock implementation in Node; the endpoint is designed so a Python FastAPI service can be plugged in later without frontend changes.
+- Error handling, pagination, and advanced UI polish (toasts, loaders, retries) are intentionally minimal to keep the focus on end‑to‑end architecture and the extension → backend → AI → frontend loop.
